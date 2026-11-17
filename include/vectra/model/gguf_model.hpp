@@ -26,6 +26,15 @@ struct GGUFTensorView {
 // Unified matrix-vector multiplication supporting Q4_K, Q6_K, Q4_0, and F32
 void matvec_dispatch(const GGUFTensorView& W, const float* x, const float* bias, float* y);
 
+// Unified batched matrix-vector multiplication
+void matvec_batch_dispatch(
+    const GGUFTensorView& W,
+    const float* const* X,
+    const float* bias,
+    float* const* Y,
+    size_t batch_size
+);
+
 // Dequantize a single row from a 2D tensor
 void dequantize_row_dispatch(const GGUFTensorView& W, int64_t row_idx, float* out);
 
@@ -68,6 +77,13 @@ public:
     void forward_token(
         int32_t token_id,
         int64_t pos,
+        KVCache& kv_cache,
+        float* logits_out
+    );
+
+    // Optimized batched prompt prefill
+    void forward_prompt_batch(
+        const std::vector<int32_t>& prompt_tokens,
         KVCache& kv_cache,
         float* logits_out
     );

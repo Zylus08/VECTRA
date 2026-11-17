@@ -51,4 +51,25 @@ float vec_dot_q6_k_f32(const BlockQ6_K* a, const float* b, size_t k);
 void matvec_q4_k_f32(const BlockQ4_K* A, const float* x, const float* bias, float* y, size_t rows, size_t cols);
 void matvec_q6_k_f32(const BlockQ6_K* A, const float* x, const float* bias, float* y, size_t rows, size_t cols);
 
+// Batched Quantized matvec: evaluates N independent vectors against same weights
+void matvec_q4_k_f32_batch(
+    const BlockQ4_K* A,
+    const float* const* X,
+    const float* bias,
+    float* const* Y,
+    size_t batch_size,
+    size_t rows,
+    size_t cols
+);
+
+void matvec_q6_k_f32_batch(
+    const BlockQ6_K* A,
+    const float* const* X,
+    const float* bias,
+    float* const* Y,
+    size_t batch_size,
+    size_t rows,
+    size_t cols
+);
+
 } // namespace vectra::quant

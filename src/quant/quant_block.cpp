@@ -1,5 +1,6 @@
 #include "vectra/quant/quant_block.hpp"
 #include "vectra/math/avx2_math.hpp"
+#include "vectra/runtime/thread_pool.hpp"
 #include <cmath>
 #include <algorithm>
 #include <cstring>
@@ -178,12 +179,15 @@ float vec_dot_q4_0_f32(const BlockQ4_0* a, const float* b, size_t k) {
 
 void matvec_q4_0_f32(const BlockQ4_0* A, const float* x, const float* bias, float* y, size_t rows, size_t cols) {
     size_t blocks_per_row = (cols + Q4_BLOCK_SIZE - 1) / Q4_BLOCK_SIZE;
-    for (size_t r = 0; r < rows; ++r) {
-        const BlockQ4_0* row_blocks = A + r * blocks_per_row;
-        float d = vec_dot_q4_0_f32(row_blocks, x, cols);
-        if (bias) d += bias[r];
-        y[r] = d;
-    }
+    auto& pool = runtime::ThreadPool::get_default_pool();
+    pool.parallel_for(0, rows, [=](size_t r_start, size_t r_end) {
+        for (size_t r = r_start; r < r_end; ++r) {
+            const BlockQ4_0* row_blocks = A + r * blocks_per_row;
+            float d = vec_dot_q4_0_f32(row_blocks, x, cols);
+            if (bias) d += bias[r];
+            y[r] = d;
+        }
+    });
 }
 
 QuantErrorMetrics evaluate_quantization_error(const float* original, const float* reconstructed, size_t n) {

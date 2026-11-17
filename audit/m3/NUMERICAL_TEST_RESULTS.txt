@@ -1,0 +1,70 @@
+=== VECTRA TEST SUITE EXECUTION ===
+Date: 2026-11-18 01:23:25
+Platform: Windows 11 x64 MSVC AVX2
+
+--- 1. Unit Tests ---
+[RUN]  test_memory_alignment ... PASSED
+[RUN]  test_fp16_conversion ... PASSED
+[RUN]  test_tensor_basics ... PASSED
+[RUN]  test_tensor_views ... PASSED
+[RUN]  test_quant_block ... PASSED
+[RUN]  test_gguf_negative_cases ... PASSED
+[RUN]  test_tokenizer ... PASSED
+
+Unit Test Summary: 7 / 7 passed.
+
+--- 2. Numerical Tests ---
+[RUN]  test_dot_product_numerical ... PASSED
+[RUN]  test_matvec_numerical ... PASSED
+[RUN]  test_rmsnorm_numerical ... PASSED
+[RUN]  test_softmax_numerical ... PASSED
+[RUN]  test_rope_numerical ... PASSED
+[RUN]  test_pathological_inputs ... PASSED
+
+Numerical Test Summary: 6 / 6 passed.
+
+--- 3. Integration Tests ---
+[RUN]  test_causal_masking_invariance ... PASSED
+[RUN]  test_tiny_transformer_generation_step ... PASSED
+[RUN]  test_quantized_matvec_integration ... PASSED
+
+Integration Test Summary: 3 / 3 passed.
+
+--- 4. Tokenizer Tests ---
+=========================================================
+        PROJECT VECTRA - TOKENIZER PARITY TESTS         
+=========================================================
+Loaded Qwen tokenizer: vocab_size=151665
+
+[RUN]  Case: plain_english ... PASSED (Tokens: 2, Exact Match)
+[RUN]  Case: numbers ... PASSED (Tokens: 12, Exact Match)
+[RUN]  Case: whitespace ... PASSED (Tokens: 5, Exact Match)
+[RUN]  Case: punctuation ... PASSED (Tokens: 10, Exact Match)
+[RUN]  Case: newlines_code ... PASSED (Tokens: 19, Exact Match)
+[RUN]  Case: hindi_multilingual ... PASSED (Tokens: 13, Exact Match)
+[RUN]  Case: japanese_multilingual ... PASSED (Tokens: 2, Exact Match)
+[RUN]  Case: emojis ... PASSED (Tokens: 4, Exact Match)
+[RUN]  Case: chatml_delimiters ... PASSED (Tokens: 10, Exact Match)
+[RUN]  Case: empty_string ... PASSED (Tokens: 0, Exact Match)
+[RUN]  Case: multi_turn ... PASSED (Tokens: 29, Exact Match)
+
+Tokenizer Test Summary: 11 / 11 passed.
+
+--- 5. M2 Tests ---
+[RUN]  test_mmap_loader ... PASSED
+[RUN]  test_q4_k_correctness ... PASSED
+[RUN]  test_q6_k_correctness ... PASSED
+[RUN]  test_sampling ... PASSED
+
+M2 Integration Test Summary: 4 / 4 passed.
+
+--- 6. M3 Tests ---
+=========================================================
+           PROJECT VECTRA - M3 INTEGRATION SUITE         
+=========================================================
+[RUN]  test_kv_cache_scaling_and_bounds ... PASSED
+[RUN]  test_thread_pool_determinism ... PASSED
+[RUN]  test_q4_k_kernel_parity ... PASSED
+[RUN]  test_full_model_reference_parity ... PASSED
+
+M3 Integration Test Summary: 4 / 4 passed.

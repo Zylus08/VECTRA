@@ -1,0 +1,16 @@
+Engine,Configuration,Threads,Prompt_Name,Prompt_Tokens,Gen_Tokens,Prefill_ms,Prefill_tok_s,Decode_ms,Decode_tok_s,Total_ms,Speedup_vs_M2,Peak_RAM_MB,Generated_Text,Match_Reference
+VECTRA_M2,Scalar_Baseline,1,P1_Capital_France,5,5,18353.00,0.27,41808.00,0.22,60161.00,1.00x,1060.50," Paris. The capital of",TRUE
+VECTRA_M3,AVX2_SingleThread,1,P1_Capital_France,5,5,6281.15,0.80,7756.90,0.52,14038.05,4.29x,1061.00," Paris. The capital of",TRUE
+VECTRA_M3,AVX2_MultiThread,2,P1_Capital_France,5,5,3256.93,1.54,4033.77,0.99,7290.70,8.25x,1061.06," Paris. The capital of",TRUE
+VECTRA_M3,AVX2_MultiThread,4,P1_Capital_France,5,5,1862.57,2.68,2142.19,1.87,4004.76,15.02x,1061.09," Paris. The capital of",TRUE
+VECTRA_M3,AVX2_MultiThread,6,P1_Capital_France,5,5,1512.87,3.30,1933.79,2.07,3446.65,17.46x,1061.13," Paris. The capital of",TRUE
+VECTRA_M3,AVX2_MultiThread,8,P1_Capital_France,5,5,1227.92,4.07,2171.96,1.84,3399.88,17.70x,1061.16," Paris. The capital of",TRUE
+VECTRA_M3,AVX2_MultiThread,10,P1_Capital_France,5,5,1052.18,4.75,1367.33,2.93,2419.51,24.86x,1061.18," Paris. The capital of",TRUE
+VECTRA_M3,AVX2_MultiThread_Warm,10,P1_Capital_France,5,5,966.49,5.17,1262.76,3.17,2229.25,26.99x,1061.18," Paris. The capital of",TRUE
+VECTRA_M3,AVX2_MultiThread,12,P1_Capital_France,5,5,1395.16,3.58,1812.48,2.21,3207.65,18.76x,1061.23," Paris. The capital of",TRUE
+VECTRA_M3,AVX2_MultiThread,16,P1_Capital_France,5,5,1355.14,3.69,2192.70,1.82,3547.83,16.96x,1061.29," Paris. The capital of",TRUE
+VECTRA_M3,AVX2_MultiThread,10,P2_Fibonacci,4,16,875.60,4.57,4422.30,3.39,5297.91,N/A,1061.10," \n    if n <= 1: \n        return n \n    else:",TRUE
+VECTRA_M3,AVX2_MultiThread,10,P3_ChatML_2plus2,16,9,2968.89,5.39,2148.68,3.72,5117.58,N/A,1062.99,"2 + 2 equals 4.<|im_end|>",TRUE
+llama.cpp_b4500,AVX2_Official,10,P1_Capital_France,5,5,267.92,18.66,110.72,36.13,806.61,74.58x,1172.47," Paris. The capital of",TRUE
+llama.cpp_b4500,AVX2_Official,10,P2_Fibonacci,4,16,254.85,15.70,409.60,36.62,1101.49,N/A,1172.50," \n    if n <= 1: \n        return n \n    else:",TRUE
+llama.cpp_b4500,AVX2_Official,10,P3_ChatML_2plus2,16,8,283.97,56.34,218.61,36.59,929.99,N/A,1172.55,"2 + 2 equals 4.",TRUE

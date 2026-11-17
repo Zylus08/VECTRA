@@ -1,0 +1,82 @@
+[
+  {
+    "threads": 1,
+    "prefill_ms": 6281.15,
+    "prefill_tok_s": 0.8,
+    "decode_ms": 7756.9,
+    "decode_tok_s": 0.52,
+    "total_ms": 14038.05,
+    "peak_mb": 1061.0,
+    "token_ids": "12095, 13, 576, 6722, 315"
+  },
+  {
+    "threads": 2,
+    "prefill_ms": 3256.93,
+    "prefill_tok_s": 1.54,
+    "decode_ms": 4033.77,
+    "decode_tok_s": 0.99,
+    "total_ms": 7290.7,
+    "peak_mb": 1061.06,
+    "token_ids": "12095, 13, 576, 6722, 315"
+  },
+  {
+    "threads": 4,
+    "prefill_ms": 1862.57,
+    "prefill_tok_s": 2.68,
+    "decode_ms": 2142.19,
+    "decode_tok_s": 1.87,
+    "total_ms": 4004.76,
+    "peak_mb": 1061.09,
+    "token_ids": "12095, 13, 576, 6722, 315"
+  },
+  {
+    "threads": 6,
+    "prefill_ms": 1512.87,
+    "prefill_tok_s": 3.3,
+    "decode_ms": 1933.79,
+    "decode_tok_s": 2.07,
+    "total_ms": 3446.65,
+    "peak_mb": 1061.13,
+    "token_ids": "12095, 13, 576, 6722, 315"
+  },
+  {
+    "threads": 8,
+    "prefill_ms": 1227.92,
+    "prefill_tok_s": 4.07,
+    "decode_ms": 2171.96,
+    "decode_tok_s": 1.84,
+    "total_ms": 3399.88,
+    "peak_mb": 1061.16,
+    "token_ids": "12095, 13, 576, 6722, 315"
+  },
+  {
+    "threads": 10,
+    "prefill_ms": 1461.18,
+    "prefill_tok_s": 3.42,
+    "decode_ms": 2202.86,
+    "decode_tok_s": 1.82,
+    "total_ms": 3664.04,
+    "peak_mb": 1061.2,
+    "token_ids": "12095, 13, 576, 6722, 315"
+  },
+  {
+    "threads": 12,
+    "prefill_ms": 1395.16,
+    "prefill_tok_s": 3.58,
+    "decode_ms": 1812.48,
+    "decode_tok_s": 2.21,
+    "total_ms": 3207.65,
+    "peak_mb": 1061.23,
+    "token_ids": "12095, 13, 576, 6722, 315"
+  },
+  {
+    "threads": 16,
+    "prefill_ms": 1355.14,
+    "prefill_tok_s": 3.69,
+    "decode_ms": 2192.7,
+    "decode_tok_s": 1.82,
+    "total_ms": 3547.83,
+    "peak_mb": 1061.29,
+    "token_ids": "12095, 13, 576, 6722, 315"
+  }
+]

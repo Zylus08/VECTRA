@@ -48,6 +48,7 @@ set(VECTRA_SOURCES
     src/format/gguf_parser.cpp
     src/format/mmap_loader.cpp
     src/runtime/sampler.cpp
+    src/runtime/thread_pool.cpp
 )
 
 add_library(vectra_static STATIC ${VECTRA_SOURCES})
@@ -90,10 +91,18 @@ if (VECTRA_BUILD_TESTS)
     add_executable(vectra_m2_tests tests/integration/m2_tests.cpp)
     target_link_libraries(vectra_m2_tests PRIVATE vectra_static)
     add_test(NAME m2_tests COMMAND vectra_m2_tests)
+
+    # M3 tests
+    add_executable(vectra_m3_tests tests/integration/m3_tests.cpp)
+    target_link_libraries(vectra_m3_tests PRIVATE vectra_static)
+    add_test(NAME m3_tests COMMAND vectra_m3_tests)
 endif()
 
 # Microbenchmarks
 if (VECTRA_BUILD_BENCHMARKS)
     add_executable(vectra_benchmarks benchmarks/kernels/benchmark_main.cpp)
     target_link_libraries(vectra_benchmarks PRIVATE vectra_static)
+
+    add_executable(vectra_m3_benchmarks benchmarks/kernels/benchmark_m3.cpp)
+    target_link_libraries(vectra_m3_benchmarks PRIVATE vectra_static)
 endif()

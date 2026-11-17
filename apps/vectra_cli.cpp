@@ -5,6 +5,8 @@
 #include "vectra/model/gguf_model.hpp"
 #include "vectra/tokenizer/bpe_tokenizer.hpp"
 #include "vectra/runtime/sampler.hpp"
+#include "vectra/runtime/thread_pool.hpp"
+#include "vectra/runtime/profiler.hpp"
 
 #include <iostream>
 #include <iomanip>
@@ -21,6 +23,7 @@ struct CliArgs {
     float top_p = 0.9f;
     int32_t top_k = 40;
     uint64_t seed = 42;
+    size_t threads = 10;
     bool chat_format = false;
 };
 
@@ -44,6 +47,8 @@ CliArgs parse_args(int argc, char* argv[]) {
             args.top_k = std::stoi(argv[++i]);
         } else if (arg == "--seed" && i + 1 < argc) {
             args.seed = std::stoull(argv[++i]);
+        } else if (arg == "--threads" && i + 1 < argc) {
+            args.threads = std::stoul(argv[++i]);
         } else if (arg == "--chat") {
             args.chat_format = true;
         } else if (arg == "--help" || arg == "-h") {
@@ -55,6 +60,7 @@ CliArgs parse_args(int argc, char* argv[]) {
                       << "  --temp <float>       Temperature (0.0 = greedy argmax, default: 0.0)\n"
                       << "  --top-p <float>      Top-p nucleus sampling (default: 0.9)\n"
                       << "  --top-k <int>        Top-k filtering (default: 40)\n"
+                      << "  --threads <int>      Thread count for thread pool (default: 10)\n"
                       << "  --seed <int>         Random seed (default: 42)\n"
                       << "  --chat               Format prompt as ChatML template\n";
             std::exit(0);
@@ -72,6 +78,11 @@ int main(int argc, char* argv[]) {
               << "\n\n";
 
     CliArgs args = parse_args(argc, argv);
+    vectra::runtime::ThreadPool::set_default_threads(args.threads);
+
+    std::cout << "Active Engine Configuration:\n"
+              << "  Worker Threads: " << args.threads << " threads in persistent pool\n"
+              << "  Prefill Engine: Batched multi-token causal GEMV-N\n\n";
 
     // 1. Format input prompt if ChatML requested
     std::string formatted_prompt = args.prompt;
@@ -181,6 +192,12 @@ int main(int argc, char* argv[]) {
     std::cout << "--- Execution Metrics ---\n";
     std::cout << "  Prompt Tokens:      " << prompt_tokens.size() << " tokens\n";
     std::cout << "  Generated Tokens:   " << generated_count << " tokens\n";
+    std::cout << "  Generated Token IDs: [";
+    for (size_t i = 0; i < output_tokens.size(); ++i) {
+        std::cout << output_tokens[i] << (i + 1 < output_tokens.size() ? ", " : "");
+    }
+    std::cout << "]\n";
+    std::cout << "  Worker Threads:     " << args.threads << " threads\n";
     std::cout << "  Prefill Latency:    " << std::fixed << std::setprecision(2) << (prefill_sec * 1000.0) << " ms ("
               << prefill_tok_per_sec << " tok/s)\n";
     std::cout << "  Decode Latency:     " << std::fixed << std::setprecision(2) << (decode_sec * 1000.0) << " ms ("

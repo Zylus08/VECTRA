@@ -38,6 +38,37 @@ void matvec_dispatch(const GGUFTensorView& W, const float* x, const float* bias,
     }
 }
 
+void matvec_batch_dispatch(
+    const GGUFTensorView& W,
+    const float* const* X,
+    const float* bias,
+    float* const* Y,
+    size_t batch_size
+) {
+    if (!W.is_valid()) {
+        throw VectraException("matvec_batch_dispatch called on invalid tensor: " + W.name);
+    }
+    if (batch_size == 0) return;
+    if (batch_size == 1) {
+        matvec_dispatch(W, X[0], bias, Y[0]);
+        return;
+    }
+
+    switch (W.type) {
+        case format::GGMLType::Q4_K:
+            quant::matvec_q4_k_f32_batch(reinterpret_cast<const quant::BlockQ4_K*>(W.data), X, bias, Y, batch_size, W.rows, W.cols);
+            break;
+        case format::GGMLType::Q6_K:
+            quant::matvec_q6_k_f32_batch(reinterpret_cast<const quant::BlockQ6_K*>(W.data), X, bias, Y, batch_size, W.rows, W.cols);
+            break;
+        default:
+            for (size_t b = 0; b < batch_size; ++b) {
+                matvec_dispatch(W, X[b], bias, Y[b]);
+            }
+            break;
+    }
+}
+
 void dequantize_row_dispatch(const GGUFTensorView& W, int64_t row_idx, float* out) {
     if (!W.is_valid()) {
         throw VectraException("dequantize_row_dispatch called on invalid tensor: " + W.name);
@@ -286,6 +317,159 @@ void GGUFTransformerModel::forward_token(
     matvec_dispatch(output_w_, final_normed.data(), nullptr, logits_out);
 }
 
+void GGUFTransformerModel::forward_prompt_batch(
+    const std::vector<int32_t>& prompt_tokens,
+    KVCache& kv_cache,
+    float* logits_out
+) {
+    if (prompt_tokens.empty()) return;
+    size_t B = prompt_tokens.size();
+    int64_t h_dim = config_.hidden_dim;
+    int64_t q_dim = config_.num_heads * config_.head_dim;
+    int64_t kv_dim = config_.num_kv_heads * config_.head_dim;
+    int64_t inter_dim = config_.intermediate_dim;
+
+    std::vector<std::vector<float>> X(B, std::vector<float>(h_dim));
+    std::vector<std::vector<float>> normed1(B, std::vector<float>(h_dim));
+    std::vector<std::vector<float>> Q(B, std::vector<float>(q_dim));
+    std::vector<std::vector<float>> K(B, std::vector<float>(kv_dim));
+    std::vector<std::vector<float>> V(B, std::vector<float>(kv_dim));
+    std::vector<std::vector<float>> attn_heads(B, std::vector<float>(q_dim));
+    std::vector<std::vector<float>> attn_out(B, std::vector<float>(h_dim));
+    std::vector<std::vector<float>> res1(B, std::vector<float>(h_dim));
+    std::vector<std::vector<float>> normed2(B, std::vector<float>(h_dim));
+    std::vector<std::vector<float>> gate(B, std::vector<float>(inter_dim));
+    std::vector<std::vector<float>> up(B, std::vector<float>(inter_dim));
+    std::vector<std::vector<float>> act(B, std::vector<float>(inter_dim));
+    std::vector<std::vector<float>> ffn_out(B, std::vector<float>(h_dim));
+
+    std::vector<const float*> ptr_normed1(B);
+    std::vector<float*> ptr_Q(B), ptr_K(B), ptr_V(B);
+    std::vector<const float*> ptr_attn_heads(B);
+    std::vector<float*> ptr_attn_out(B);
+    std::vector<const float*> ptr_normed2(B);
+    std::vector<float*> ptr_gate(B), ptr_up(B);
+    std::vector<const float*> ptr_act(B);
+    std::vector<float*> ptr_ffn_out(B);
+
+    for (size_t b = 0; b < B; ++b) {
+        ptr_normed1[b] = normed1[b].data();
+        ptr_Q[b] = Q[b].data();
+        ptr_K[b] = K[b].data();
+        ptr_V[b] = V[b].data();
+        ptr_attn_heads[b] = attn_heads[b].data();
+        ptr_attn_out[b] = attn_out[b].data();
+        ptr_normed2[b] = normed2[b].data();
+        ptr_gate[b] = gate[b].data();
+        ptr_up[b] = up[b].data();
+        ptr_act[b] = act[b].data();
+        ptr_ffn_out[b] = ffn_out[b].data();
+    }
+
+    // 1. Initial embeddings lookup for all prompt tokens
+    for (size_t b = 0; b < B; ++b) {
+        dequantize_row_dispatch(token_embd_w_, prompt_tokens[b], X[b].data());
+    }
+
+    // 2. Iterate through 28 layers
+    for (int64_t l = 0; l < config_.num_layers; ++l) {
+        auto& layer = layers_[l];
+        const float* attn_norm_ptr = reinterpret_cast<const float*>(layer.attn_norm_w.data);
+
+        // Pre-Attention RMSNorm
+        for (size_t b = 0; b < B; ++b) {
+            if (math::avx2::is_supported()) {
+                math::avx2::rms_norm(X[b].data(), attn_norm_ptr, normed1[b].data(), h_dim, config_.rms_norm_eps);
+            } else {
+                math::scalar::rms_norm(X[b].data(), attn_norm_ptr, normed1[b].data(), h_dim, config_.rms_norm_eps);
+            }
+        }
+
+        // Batched Q, K, V Projections
+        const float* q_bias = layer.q_proj_b.is_valid() ? reinterpret_cast<const float*>(layer.q_proj_b.data) : nullptr;
+        const float* k_bias = layer.k_proj_b.is_valid() ? reinterpret_cast<const float*>(layer.k_proj_b.data) : nullptr;
+        const float* v_bias = layer.v_proj_b.is_valid() ? reinterpret_cast<const float*>(layer.v_proj_b.data) : nullptr;
+
+        matvec_batch_dispatch(layer.q_proj_w, ptr_normed1.data(), q_bias, ptr_Q.data(), B);
+        matvec_batch_dispatch(layer.k_proj_w, ptr_normed1.data(), k_bias, ptr_K.data(), B);
+        matvec_batch_dispatch(layer.v_proj_w, ptr_normed1.data(), v_bias, ptr_V.data(), B);
+
+        // RoPE and KV Cache Append for all tokens in prompt
+        for (size_t b = 0; b < B; ++b) {
+            int64_t pos = static_cast<int64_t>(b);
+            math::apply_rope_to_heads(Q[b].data(), config_.num_heads, K[b].data(), config_.num_kv_heads, config_.head_dim, pos, config_.rope_theta);
+            kv_cache.append(l, pos, K[b].data(), V[b].data());
+        }
+
+        // Causal GQA Attention: token b attends to tokens [0..b]
+        for (size_t b = 0; b < B; ++b) {
+            int64_t pos = static_cast<int64_t>(b);
+            int64_t current_seq = pos + 1;
+            math::compute_gqa_attention(
+                Q[b].data(),
+                kv_cache.key_cache(l),
+                kv_cache.val_cache(l),
+                attn_heads[b].data(),
+                config_.num_heads,
+                config_.num_kv_heads,
+                config_.head_dim,
+                current_seq,
+                pos
+            );
+        }
+
+        // Attention output projection + residual
+        matvec_batch_dispatch(layer.o_proj_w, ptr_attn_heads.data(), nullptr, ptr_attn_out.data(), B);
+        for (size_t b = 0; b < B; ++b) {
+            if (math::avx2::is_supported()) {
+                math::avx2::add(X[b].data(), attn_out[b].data(), res1[b].data(), h_dim);
+            } else {
+                math::scalar::add(X[b].data(), attn_out[b].data(), res1[b].data(), h_dim);
+            }
+        }
+
+        // Post-Attention RMSNorm
+        const float* ffn_norm_ptr = reinterpret_cast<const float*>(layer.ffn_norm_w.data);
+        for (size_t b = 0; b < B; ++b) {
+            if (math::avx2::is_supported()) {
+                math::avx2::rms_norm(res1[b].data(), ffn_norm_ptr, normed2[b].data(), h_dim, config_.rms_norm_eps);
+            } else {
+                math::scalar::rms_norm(res1[b].data(), ffn_norm_ptr, normed2[b].data(), h_dim, config_.rms_norm_eps);
+            }
+        }
+
+        // SwiGLU FFN Projections
+        matvec_batch_dispatch(layer.gate_proj_w, ptr_normed2.data(), nullptr, ptr_gate.data(), B);
+        matvec_batch_dispatch(layer.up_proj_w, ptr_normed2.data(), nullptr, ptr_up.data(), B);
+
+        for (size_t b = 0; b < B; ++b) {
+            math::scalar::swiglu(gate[b].data(), up[b].data(), act[b].data(), inter_dim);
+        }
+
+        matvec_batch_dispatch(layer.down_proj_w, ptr_act.data(), nullptr, ptr_ffn_out.data(), B);
+
+        // Residual connection
+        for (size_t b = 0; b < B; ++b) {
+            if (math::avx2::is_supported()) {
+                math::avx2::add(res1[b].data(), ffn_out[b].data(), X[b].data(), h_dim);
+            } else {
+                math::scalar::add(res1[b].data(), ffn_out[b].data(), X[b].data(), h_dim);
+            }
+        }
+    }
+
+    // 3. Final RMSNorm and LM Head only for the LAST prompt token (token B-1)
+    std::vector<float> final_normed(h_dim);
+    const float* norm_ptr = reinterpret_cast<const float*>(output_norm_w_.data);
+    if (math::avx2::is_supported()) {
+        math::avx2::rms_norm(X[B - 1].data(), norm_ptr, final_normed.data(), h_dim, config_.rms_norm_eps);
+    } else {
+        math::scalar::rms_norm(X[B - 1].data(), norm_ptr, final_normed.data(), h_dim, config_.rms_norm_eps);
+    }
+
+    matvec_dispatch(output_w_, final_normed.data(), nullptr, logits_out);
+}
+
 std::vector<int32_t> GGUFTransformerModel::generate(
     const std::vector<int32_t>& prompt_tokens,
     size_t max_new_tokens,
@@ -300,10 +484,14 @@ std::vector<int32_t> GGUFTransformerModel::generate(
     KVCache kv_cache(config_.num_layers, context_limit, config_.num_kv_heads, config_.head_dim);
     std::vector<float> logits(config_.vocab_size);
 
-    // 1. Prefill prompt tokens
-    for (size_t pos = 0; pos < prompt_tokens.size(); ++pos) {
-        if (static_cast<int64_t>(pos) >= context_limit) break;
-        forward_token(prompt_tokens[pos], static_cast<int64_t>(pos), kv_cache, logits.data());
+    // 1. Batched prefill prompt tokens
+    if (prompt_tokens.size() > 1 && static_cast<int64_t>(prompt_tokens.size()) <= context_limit) {
+        forward_prompt_batch(prompt_tokens, kv_cache, logits.data());
+    } else {
+        for (size_t pos = 0; pos < prompt_tokens.size(); ++pos) {
+            if (static_cast<int64_t>(pos) >= context_limit) break;
+            forward_token(prompt_tokens[pos], static_cast<int64_t>(pos), kv_cache, logits.data());
+        }
     }
 
     // 2. Autoregressive decode loop

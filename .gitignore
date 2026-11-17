@@ -48,6 +48,9 @@ env/
 *.onnx
 *.safetensors
 *.gguf
+*.zip
+models/
+tools/reference/llama_bin/
 !tests/fixtures/*.gguf
 models/
 weights/
