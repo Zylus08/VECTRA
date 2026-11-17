@@ -1,0 +1,9 @@
+kernel_name,shape,threads,warmup_iters,timed_iters,median_us_scalar,median_us_avx2,speedup_ratio,memory_bytes,numerical_pass
+"FP32 Dot Product","1024",1,50,200,0.7,0.1,7,8192,true
+"FP32 Matvec","256x1024",1,50,200,154.3,14.9,10.3557,1053696,true
+"Quantized Q4_0 Dot","1024",1,50,200,0.6,0.8,0.75,4672,true
+"Quantized Q4_0 Matvec","256x1024",1,50,200,154.3,437,0.353089,151552,true
+"RMSNorm (Target Dim)","1536",1,50,200,1.1,0.4,2.75,18432,true
+"Softmax","1024",1,50,200,4.6,4.6,1,8192,true
+"RoPE (12 heads x 128 dim)","12x128",1,50,200,18.1,18.1,1,6144,true
+"KV Cache Append (28 layers)","28x2x128",1,50,200,1.2,1.2,1,29360128,true

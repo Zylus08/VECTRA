@@ -1,0 +1,34 @@
+================================================================================
+PROJECT VECTRA - TEST SUITE EXECUTION REPORT
+Timestamp: 2026-11-17 23:55:31
+Platform: Windows 11 x64 (Build 26200)
+Compiler: MSVC 19.43.34809 (VS 2022 v17.13.5)
+Target Architecture: x86_64 with AVX2 + FMA
+================================================================================
+
+[CONFIGURATION: RELEASE (/O2 /Oi /Ot /GL /arch:AVX2)]
+
+--- Unit Tests ---
+[RUN]  test_memory_alignment ... PASSED [RUN]  test_fp16_conversion ... PASSED [RUN]  test_tensor_basics ... PASSED [RUN]  test_tensor_views ... PASSED [RUN]  test_quant_block ... PASSED [RUN]  test_gguf_negative_cases ... PASSED [RUN]  test_tokenizer ... PASSED  Unit Test Summary: 7 / 7 passed.
+
+--- Numerical Verification Tests ---
+[RUN]  test_dot_product_numerical ... PASSED [RUN]  test_matvec_numerical ... PASSED [RUN]  test_rmsnorm_numerical ... PASSED [RUN]  test_softmax_numerical ... PASSED [RUN]  test_rope_numerical ... PASSED [RUN]  test_pathological_inputs ... PASSED  Numerical Test Summary: 6 / 6 passed.
+
+--- Integration Tests ---
+[RUN]  test_causal_masking_invariance ... PASSED [RUN]  test_tiny_transformer_generation_step ... PASSED [RUN]  test_quantized_matvec_integration ... PASSED  Integration Test Summary: 3 / 3 passed.
+
+================================================================================
+
+[CONFIGURATION: DEBUG (/Od /Zi /arch:AVX2)]
+
+--- Unit Tests ---
+[RUN]  test_memory_alignment ... PASSED [RUN]  test_fp16_conversion ... PASSED [RUN]  test_tensor_basics ... PASSED [RUN]  test_tensor_views ... PASSED [RUN]  test_quant_block ... PASSED [RUN]  test_gguf_negative_cases ... PASSED [RUN]  test_tokenizer ... PASSED  Unit Test Summary: 7 / 7 passed.
+
+--- Numerical Verification Tests ---
+[RUN]  test_dot_product_numerical ... PASSED [RUN]  test_matvec_numerical ... PASSED [RUN]  test_rmsnorm_numerical ... PASSED [RUN]  test_softmax_numerical ... PASSED [RUN]  test_rope_numerical ... PASSED [RUN]  test_pathological_inputs ... PASSED  Numerical Test Summary: 6 / 6 passed.
+
+--- Integration Tests ---
+[RUN]  test_causal_masking_invariance ... PASSED [RUN]  test_tiny_transformer_generation_step ... PASSED [RUN]  test_quantized_matvec_integration ... PASSED  Integration Test Summary: 3 / 3 passed.
+
+================================================================================
+ALL TESTS COMPLETED SUCCESSFULLY: 16/16 PASSED ACROSS BOTH BUILD MODES.
