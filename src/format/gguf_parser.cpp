@@ -226,15 +226,63 @@ void GGUFParser::parse_memory(const uint8_t* buffer, size_t size) {
         info.type = static_cast<GGMLType>(reader.read<uint32_t>());
         info.offset = reader.read<uint64_t>();
 
-        // Estimate size
-        if (info.type == GGMLType::F32) {
-            info.size_bytes = total_elements * 4;
-        } else if (info.type == GGMLType::F16 || info.type == GGMLType::BF16) {
-            info.size_bytes = total_elements * 2;
-        } else if (info.type == GGMLType::Q4_0) {
-            info.size_bytes = ((total_elements + 31) / 32) * 18;
-        } else {
-            info.size_bytes = total_elements; // estimate for reporting
+        // Compute exact byte size based on type and block dimensions
+        switch (info.type) {
+            case GGMLType::F32:
+            case GGMLType::I32:
+                info.size_bytes = total_elements * 4;
+                break;
+            case GGMLType::F16:
+            case GGMLType::BF16:
+            case GGMLType::I16:
+                info.size_bytes = total_elements * 2;
+                break;
+            case GGMLType::I8:
+                info.size_bytes = total_elements * 1;
+                break;
+            case GGMLType::I64:
+            case GGMLType::F64:
+                info.size_bytes = total_elements * 8;
+                break;
+            case GGMLType::Q4_0:
+                info.size_bytes = ((total_elements + 31) / 32) * 18;
+                break;
+            case GGMLType::Q4_1:
+                info.size_bytes = ((total_elements + 31) / 32) * 20;
+                break;
+            case GGMLType::Q5_0:
+                info.size_bytes = ((total_elements + 31) / 32) * 22;
+                break;
+            case GGMLType::Q5_1:
+                info.size_bytes = ((total_elements + 31) / 32) * 24;
+                break;
+            case GGMLType::Q8_0:
+                info.size_bytes = ((total_elements + 31) / 32) * 34;
+                break;
+            case GGMLType::Q8_1:
+                info.size_bytes = ((total_elements + 31) / 32) * 40;
+                break;
+            case GGMLType::Q2_K:
+                info.size_bytes = ((total_elements + 255) / 256) * 84;
+                break;
+            case GGMLType::Q3_K:
+                info.size_bytes = ((total_elements + 255) / 256) * 110;
+                break;
+            case GGMLType::Q4_K:
+                info.size_bytes = ((total_elements + 255) / 256) * 144;
+                break;
+            case GGMLType::Q5_K:
+                info.size_bytes = ((total_elements + 255) / 256) * 176;
+                break;
+            case GGMLType::Q6_K:
+                info.size_bytes = ((total_elements + 255) / 256) * 210;
+                break;
+            case GGMLType::Q8_K:
+                info.size_bytes = ((total_elements + 255) / 256) * 292;
+                break;
+            default:
+                info.size_bytes = total_elements;
+                break;
         }
 
         tensors_.push_back(std::move(info));

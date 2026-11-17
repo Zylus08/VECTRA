@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
-project(VECTRA VERSION 0.1.0 LANGUAGES CXX)
+project(VECTRA VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(VECTRA_ENABLE_AVX2 "Enable AVX2 instruction set optimizations" ON)
-option(VECTRA_BUILD_TESTS "Build unit and numerical tests" ON)
+option(VECTRA_BUILD_TESTS "Build unit, numerical, and integration tests" ON)
 option(VECTRA_BUILD_BENCHMARKS "Build microbenchmarks" ON)
 option(VECTRA_BUILD_APPS "Build CLI applications" ON)
 
@@ -29,7 +29,7 @@ endif()
 
 include_directories(include)
 
-# Core library
+# Core library sources
 set(VECTRA_SOURCES
     src/core/memory.cpp
     src/core/types.cpp
@@ -39,14 +39,22 @@ set(VECTRA_SOURCES
     src/math/avx2_math.cpp
     src/math/transformer_ops.cpp
     src/quant/quant_block.cpp
+    src/quant/quant_k.cpp
     src/model/kv_cache.cpp
     src/model/transformer.cpp
+    src/model/gguf_model.cpp
     src/tokenizer/tokenizer.cpp
+    src/tokenizer/bpe_tokenizer.cpp
     src/format/gguf_parser.cpp
+    src/format/mmap_loader.cpp
+    src/runtime/sampler.cpp
 )
 
 add_library(vectra_static STATIC ${VECTRA_SOURCES})
 target_include_directories(vectra_static PUBLIC include)
+if (WIN32)
+    target_link_libraries(vectra_static PUBLIC psapi)
+endif()
 
 # Applications
 if (VECTRA_BUILD_APPS)
@@ -61,6 +69,7 @@ endif()
 if (VECTRA_BUILD_TESTS)
     enable_testing()
     
+    # M1 Regression tests
     add_executable(vectra_unit_tests tests/unit/unit_tests.cpp)
     target_link_libraries(vectra_unit_tests PRIVATE vectra_static)
     add_test(NAME unit_tests COMMAND vectra_unit_tests)
@@ -72,6 +81,15 @@ if (VECTRA_BUILD_TESTS)
     add_executable(vectra_integration_tests tests/integration/integration_tests.cpp)
     target_link_libraries(vectra_integration_tests PRIVATE vectra_static)
     add_test(NAME integration_tests COMMAND vectra_integration_tests)
+
+    # M2 tests
+    add_executable(vectra_tokenizer_tests tests/unit/tokenizer_tests.cpp)
+    target_link_libraries(vectra_tokenizer_tests PRIVATE vectra_static)
+    add_test(NAME tokenizer_tests COMMAND vectra_tokenizer_tests)
+
+    add_executable(vectra_m2_tests tests/integration/m2_tests.cpp)
+    target_link_libraries(vectra_m2_tests PRIVATE vectra_static)
+    add_test(NAME m2_tests COMMAND vectra_m2_tests)
 endif()
 
 # Microbenchmarks

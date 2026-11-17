@@ -1,0 +1,184 @@
+[
+  {
+    "name": "plain_english",
+    "text": "Hello world",
+    "expected_tokens": [
+      9707,
+      1879
+    ],
+    "decoded": "Hello world"
+  },
+  {
+    "name": "numbers",
+    "text": "123 456 7890",
+    "expected_tokens": [
+      16,
+      17,
+      18,
+      220,
+      19,
+      20,
+      21,
+      220,
+      22,
+      23,
+      24,
+      15
+    ],
+    "decoded": "123 456 7890"
+  },
+  {
+    "name": "whitespace",
+    "text": "   leading and trailing   ",
+    "expected_tokens": [
+      256,
+      6388,
+      323,
+      27748,
+      262
+    ],
+    "decoded": "   leading and trailing   "
+  },
+  {
+    "name": "punctuation",
+    "text": "Hello, world! How are you doing today?",
+    "expected_tokens": [
+      9707,
+      11,
+      1879,
+      0,
+      2585,
+      525,
+      498,
+      3730,
+      3351,
+      30
+    ],
+    "decoded": "Hello, world! How are you doing today?"
+  },
+  {
+    "name": "newlines_code",
+    "text": "def add(a: int, b: int) -> int:\n    return a + b\n",
+    "expected_tokens": [
+      750,
+      912,
+      2877,
+      25,
+      526,
+      11,
+      293,
+      25,
+      526,
+      8,
+      1464,
+      526,
+      510,
+      262,
+      470,
+      264,
+      488,
+      293,
+      198
+    ],
+    "decoded": "def add(a: int, b: int) -> int:\n    return a + b\n"
+  },
+  {
+    "name": "hindi_multilingual",
+    "text": "नमस्ते दुनिया",
+    "expected_tokens": [
+      60096,
+      87244,
+      78368,
+      30484,
+      97,
+      34370,
+      14925,
+      99,
+      72653,
+      60096,
+      42311,
+      107,
+      23868
+    ],
+    "decoded": "नमस्ते दुनिया"
+  },
+  {
+    "name": "japanese_multilingual",
+    "text": "こんにちは世界",
+    "expected_tokens": [
+      89015,
+      99489
+    ],
+    "decoded": "こんにちは世界"
+  },
+  {
+    "name": "emojis",
+    "text": "🌟🚀🔥🤖",
+    "expected_tokens": [
+      144907,
+      145836,
+      144670,
+      147238
+    ],
+    "decoded": "🌟🚀🔥🤖"
+  },
+  {
+    "name": "chatml_delimiters",
+    "text": "<|im_start|>user\nHello!<|im_end|>\n<|im_start|>assistant\n",
+    "expected_tokens": [
+      151644,
+      872,
+      198,
+      9707,
+      0,
+      151645,
+      198,
+      151644,
+      77091,
+      198
+    ],
+    "decoded": "<|im_start|>user\nHello!<|im_end|>\n<|im_start|>assistant\n"
+  },
+  {
+    "name": "empty_string",
+    "text": "",
+    "expected_tokens": [],
+    "decoded": ""
+  },
+  {
+    "name": "multi_turn",
+    "text": "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nWhat is 2+2?<|im_end|>\n<|im_start|>assistant\n4<|im_end|>\n",
+    "expected_tokens": [
+      151644,
+      8948,
+      198,
+      2610,
+      525,
+      264,
+      10950,
+      17847,
+      13,
+      151645,
+      198,
+      151644,
+      872,
+      198,
+      3838,
+      374,
+      220,
+      17,
+      10,
+      17,
+      30,
+      151645,
+      198,
+      151644,
+      77091,
+      198,
+      19,
+      151645,
+      198
+    ],
+    "decoded": "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nWhat is 2+2?<|im_end|>\n<|im_start|>assistant\n4<|im_end|>\n"
+  }
+]

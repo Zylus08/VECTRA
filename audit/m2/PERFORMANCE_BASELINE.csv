@@ -1,0 +1,6 @@
+benchmark_id,task,prompt_tokens,generated_tokens,prefill_time_ms,decode_time_ms,total_time_ms,prefill_tok_per_sec,decode_tok_per_sec,peak_working_set_mb
+RUN_01_KNOWLEDGE,The capital of France is,5,10,18353.26,41808.23,60161.49,0.27,0.22,1060.43
+RUN_02_CODE,def fibonacci(n):,4,12,14643.04,50512.82,65155.86,0.27,0.22,1060.43
+RUN_03_CHATML,What is 2 + 2?,16,8,64582.82,33628.88,98211.69,0.25,0.21,1060.38
+MMAP_INIT,Memory map 1065.56MB GGUF,0,0,18.80,0.00,18.80,0.00,0.00,1004.18
+TOKENIZER_LOAD,Load 151665 BPE vocab,0,0,162.20,0.00,162.20,0.00,0.00,45.20
