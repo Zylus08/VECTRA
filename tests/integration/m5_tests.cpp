@@ -241,9 +241,14 @@ bool test_m5_prefill_throughput_recovery() {
     // Prompt of 5 tokens
     std::vector<int32_t> prompt = {785, 6722, 315, 9625, 374};
 
-    auto t0 = std::chrono::high_resolution_clock::now();
     vectra::model::KVCache kv_cache(model.config().num_layers, 1024, model.config().num_kv_heads, model.config().head_dim);
     std::vector<float> logits(model.config().vocab_size);
+
+    // Warm up one step so pages are in CPU cache / OS page cache
+    model.forward_prompt_batch(prompt, kv_cache, logits.data());
+    kv_cache.reset();
+
+    auto t0 = std::chrono::high_resolution_clock::now();
     model.forward_prompt_batch(prompt, kv_cache, logits.data());
     auto t1 = std::chrono::high_resolution_clock::now();
 
