@@ -25,6 +25,7 @@ struct CliArgs {
     uint64_t seed = 42;
     size_t threads = 10;
     bool chat_format = false;
+    bool use_int8 = true;
 };
 
 CliArgs parse_args(int argc, char* argv[]) {
@@ -51,6 +52,10 @@ CliArgs parse_args(int argc, char* argv[]) {
             args.threads = std::stoul(argv[++i]);
         } else if (arg == "--chat") {
             args.chat_format = true;
+        } else if (arg == "--fp32") {
+            args.use_int8 = false;
+        } else if (arg == "--int8") {
+            args.use_int8 = true;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: vectra_cli [options]\n"
                       << "  --model <path>       Path to GGUF model file\n"
@@ -62,7 +67,9 @@ CliArgs parse_args(int argc, char* argv[]) {
                       << "  --top-k <int>        Top-k filtering (default: 40)\n"
                       << "  --threads <int>      Thread count for thread pool (default: 10)\n"
                       << "  --seed <int>         Random seed (default: 42)\n"
-                      << "  --chat               Format prompt as ChatML template\n";
+                      << "  --chat               Format prompt as ChatML template\n"
+                      << "  --int8               Enable INT8 activation quantization (default)\n"
+                      << "  --fp32               Disable INT8, use pure FP32 fused AVX2\n";
             std::exit(0);
         }
     }
@@ -110,6 +117,7 @@ int main(int argc, char* argv[]) {
     vectra::model::GGUFTransformerModel model;
     try {
         model.load(args.model_path);
+        model.set_use_int8_kernels(args.use_int8);
     } catch (const std::exception& e) {
         std::cerr << "Error loading model: " << e.what() << "\n";
         return 1;

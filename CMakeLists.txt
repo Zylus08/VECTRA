@@ -96,6 +96,11 @@ if (VECTRA_BUILD_TESTS)
     add_executable(vectra_m3_tests tests/integration/m3_tests.cpp)
     target_link_libraries(vectra_m3_tests PRIVATE vectra_static)
     add_test(NAME m3_tests COMMAND vectra_m3_tests)
+
+    # M4 tests
+    add_executable(vectra_m4_tests tests/integration/m4_tests.cpp)
+    target_link_libraries(vectra_m4_tests PRIVATE vectra_static)
+    add_test(NAME m4_tests COMMAND vectra_m4_tests)
 endif()
 
 # Microbenchmarks
@@ -105,4 +110,7 @@ if (VECTRA_BUILD_BENCHMARKS)
 
     add_executable(vectra_m3_benchmarks benchmarks/kernels/benchmark_m3.cpp)
     target_link_libraries(vectra_m3_benchmarks PRIVATE vectra_static)
+
+    add_executable(vectra_m4_int8 benchmarks/kernels/benchmark_m4_int8.cpp)
+    target_link_libraries(vectra_m4_int8 PRIVATE vectra_static)
 endif()

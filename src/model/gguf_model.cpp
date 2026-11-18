@@ -114,7 +114,8 @@ void GGUFTransformerLayer::forward(
     int64_t pos,
     int64_t layer_idx,
     KVCache& kv_cache,
-    const ModelConfig& config
+    const ModelConfig& config,
+    bool use_int8
 ) {
     int64_t h_dim = config.hidden_dim;
     int64_t q_dim = config.num_heads * config.head_dim;
@@ -146,9 +147,17 @@ void GGUFTransformerLayer::forward(
     const float* k_bias = k_proj_b.is_valid() ? reinterpret_cast<const float*>(k_proj_b.data) : nullptr;
     const float* v_bias = v_proj_b.is_valid() ? reinterpret_cast<const float*>(v_proj_b.data) : nullptr;
 
-    matvec_dispatch(q_proj_w, normed1.data(), q_bias, q.data());
-    matvec_dispatch(k_proj_w, normed1.data(), k_bias, k.data());
-    matvec_dispatch(v_proj_w, normed1.data(), v_bias, v.data());
+    if (use_int8 && math::avx2::is_supported() && q_proj_w.type == format::GGMLType::Q4_K) {
+        alignas(32) quant::BlockQ8_K_256 q8_normed1[6];
+        quant::quantize_activation_q8_k_256(normed1.data(), q8_normed1, h_dim);
+        quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(q_proj_w.data), q8_normed1, q_bias, q.data(), q_proj_w.rows, q_proj_w.cols);
+        quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(k_proj_w.data), q8_normed1, k_bias, k.data(), k_proj_w.rows, k_proj_w.cols);
+        quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(v_proj_w.data), q8_normed1, v_bias, v.data(), v_proj_w.rows, v_proj_w.cols);
+    } else {
+        matvec_dispatch(q_proj_w, normed1.data(), q_bias, q.data());
+        matvec_dispatch(k_proj_w, normed1.data(), k_bias, k.data());
+        matvec_dispatch(v_proj_w, normed1.data(), v_bias, v.data());
+    }
 
     // 3. RoPE
     math::apply_rope_to_heads(q.data(), config.num_heads, k.data(), config.num_kv_heads, config.head_dim, pos, config.rope_theta);
@@ -171,7 +180,14 @@ void GGUFTransformerLayer::forward(
     );
 
     // 6. Attention Output Projection + Residual
-    matvec_dispatch(o_proj_w, attn_heads.data(), nullptr, attn_out.data());
+    if (use_int8 && math::avx2::is_supported() && o_proj_w.type == format::GGMLType::Q4_K) {
+        alignas(32) quant::BlockQ8_K_256 q8_attn[6];
+        quant::quantize_activation_q8_k_256(attn_heads.data(), q8_attn, h_dim);
+        quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(o_proj_w.data), q8_attn, nullptr, attn_out.data(), o_proj_w.rows, o_proj_w.cols);
+    } else {
+        matvec_dispatch(o_proj_w, attn_heads.data(), nullptr, attn_out.data());
+    }
+
     if (math::avx2::is_supported()) {
         math::avx2::add(x_in, attn_out.data(), res1.data(), h_dim);
     } else {
@@ -187,10 +203,25 @@ void GGUFTransformerLayer::forward(
     }
 
     // 8. SwiGLU FFN
-    matvec_dispatch(gate_proj_w, normed2.data(), nullptr, gate.data());
-    matvec_dispatch(up_proj_w, normed2.data(), nullptr, up.data());
+    if (use_int8 && math::avx2::is_supported() && gate_proj_w.type == format::GGMLType::Q4_K) {
+        alignas(32) quant::BlockQ8_K_256 q8_normed2[6];
+        quant::quantize_activation_q8_k_256(normed2.data(), q8_normed2, h_dim);
+        quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(gate_proj_w.data), q8_normed2, nullptr, gate.data(), gate_proj_w.rows, gate_proj_w.cols);
+        quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(up_proj_w.data), q8_normed2, nullptr, up.data(), up_proj_w.rows, up_proj_w.cols);
+    } else {
+        matvec_dispatch(gate_proj_w, normed2.data(), nullptr, gate.data());
+        matvec_dispatch(up_proj_w, normed2.data(), nullptr, up.data());
+    }
+
     math::scalar::swiglu(gate.data(), up.data(), act.data(), config.intermediate_dim);
-    matvec_dispatch(down_proj_w, act.data(), nullptr, ffn_out.data());
+
+    if (use_int8 && math::avx2::is_supported() && down_proj_w.type == format::GGMLType::Q6_K) {
+        alignas(32) quant::BlockQ8_K_256 q8_act[35]; // 8960 / 256 = 35 blocks
+        quant::quantize_activation_q8_k_256(act.data(), q8_act, config.intermediate_dim);
+        quant::matvec_q6_k_q8(reinterpret_cast<const quant::BlockQ6_K*>(down_proj_w.data), q8_act, nullptr, ffn_out.data(), down_proj_w.rows, down_proj_w.cols);
+    } else {
+        matvec_dispatch(down_proj_w, act.data(), nullptr, ffn_out.data());
+    }
 
     // 9. Second Residual
     if (math::avx2::is_supported()) {
@@ -300,7 +331,7 @@ void GGUFTransformerModel::forward_token(
 
     // 2. Forward through all layers
     for (int64_t l = 0; l < config_.num_layers; ++l) {
-        layers_[l].forward(x_cur.data(), x_next.data(), pos, l, kv_cache, config_);
+        layers_[l].forward(x_cur.data(), x_next.data(), pos, l, kv_cache, config_, use_int8_kernels_);
         x_cur = x_next;
     }
 
@@ -314,7 +345,20 @@ void GGUFTransformerModel::forward_token(
     }
 
     // 4. Output projection to logits
-    matvec_dispatch(output_w_, final_normed.data(), nullptr, logits_out);
+    if (use_int8_kernels_ && math::avx2::is_supported() && output_w_.type == format::GGMLType::Q6_K) {
+        alignas(32) quant::BlockQ8_K_256 q8_final[6];
+        quant::quantize_activation_q8_k_256(final_normed.data(), q8_final, h_dim);
+        quant::matvec_q6_k_q8(
+            reinterpret_cast<const quant::BlockQ6_K*>(output_w_.data),
+            q8_final,
+            nullptr,
+            logits_out,
+            output_w_.rows,
+            output_w_.cols
+        );
+    } else {
+        matvec_dispatch(output_w_, final_normed.data(), nullptr, logits_out);
+    }
 }
 
 void GGUFTransformerModel::forward_prompt_batch(
@@ -467,7 +511,20 @@ void GGUFTransformerModel::forward_prompt_batch(
         math::scalar::rms_norm(X[B - 1].data(), norm_ptr, final_normed.data(), h_dim, config_.rms_norm_eps);
     }
 
-    matvec_dispatch(output_w_, final_normed.data(), nullptr, logits_out);
+    if (use_int8_kernels_ && math::avx2::is_supported() && output_w_.type == format::GGMLType::Q6_K) {
+        alignas(32) quant::BlockQ8_K_256 q8_final[6];
+        quant::quantize_activation_q8_k_256(final_normed.data(), q8_final, h_dim);
+        quant::matvec_q6_k_q8(
+            reinterpret_cast<const quant::BlockQ6_K*>(output_w_.data),
+            q8_final,
+            nullptr,
+            logits_out,
+            output_w_.rows,
+            output_w_.cols
+        );
+    } else {
+        matvec_dispatch(output_w_, final_normed.data(), nullptr, logits_out);
+    }
 }
 
 std::vector<int32_t> GGUFTransformerModel::generate(

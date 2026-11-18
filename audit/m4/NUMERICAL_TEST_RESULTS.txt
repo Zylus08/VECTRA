@@ -1,0 +1,87 @@
+================================================================================
+PROJECT VECTRA - FULL TEST SUITE EXECUTION REPORT (MILESTONE M4)
+Timestamp: 2026-11-18 19:25:00
+Platform: Windows 11 x64 (Build 26200)
+Compiler: Microsoft Visual C++ 19.43.34808 (VS 2022 v17.13.5)
+Target Architecture: x86_64 with AVX2 + FMA
+Model Evaluated: models/qwen2.5-1.5b-instruct-q4_k_m.gguf
+================================================================================
+
+[SUITE 1: UNIT TESTS (vectra_unit_tests.exe)]
+[RUN]  test_memory_alignment ... PASSED
+[RUN]  test_fp16_conversion ... PASSED
+[RUN]  test_tensor_basics ... PASSED
+[RUN]  test_tensor_views ... PASSED
+[RUN]  test_quant_block ... PASSED
+[RUN]  test_gguf_negative_cases ... PASSED
+[RUN]  test_tokenizer ... PASSED
+Summary: 7 / 7 passed.
+
+--------------------------------------------------------------------------------
+
+[SUITE 2: NUMERICAL VERIFICATION TESTS (vectra_numerical_tests.exe)]
+[RUN]  test_dot_product_numerical ... PASSED
+[RUN]  test_matvec_numerical ... PASSED
+[RUN]  test_rmsnorm_numerical ... PASSED
+[RUN]  test_softmax_numerical ... PASSED
+[RUN]  test_rope_numerical ... PASSED
+[RUN]  test_pathological_inputs ... PASSED
+Summary: 6 / 6 passed.
+
+--------------------------------------------------------------------------------
+
+[SUITE 3: INTEGRATION TESTS (vectra_integration_tests.exe)]
+[RUN]  test_causal_masking_invariance ... PASSED
+[RUN]  test_tiny_transformer_generation_step ... PASSED
+[RUN]  test_quantized_matvec_integration ... PASSED
+Summary: 3 / 3 passed.
+
+--------------------------------------------------------------------------------
+
+[SUITE 4: TOKENIZER PARITY TESTS (vectra_tokenizer_tests.exe)]
+Loaded Qwen tokenizer: vocab_size=151665
+[RUN]  Case: plain_english ... PASSED (Tokens: 2, Exact Match)
+[RUN]  Case: numbers ... PASSED (Tokens: 12, Exact Match)
+[RUN]  Case: whitespace ... PASSED (Tokens: 5, Exact Match)
+[RUN]  Case: punctuation ... PASSED (Tokens: 10, Exact Match)
+[RUN]  Case: newlines_code ... PASSED (Tokens: 19, Exact Match)
+[RUN]  Case: hindi_multilingual ... PASSED (Tokens: 13, Exact Match)
+[RUN]  Case: japanese_multilingual ... PASSED (Tokens: 2, Exact Match)
+[RUN]  Case: emojis ... PASSED (Tokens: 4, Exact Match)
+[RUN]  Case: chatml_delimiters ... PASSED (Tokens: 10, Exact Match)
+[RUN]  Case: empty_string ... PASSED (Tokens: 0, Exact Match)
+[RUN]  Case: multi_turn ... PASSED (Tokens: 29, Exact Match)
+Summary: 11 / 11 passed.
+
+--------------------------------------------------------------------------------
+
+[SUITE 5: M2 INTEGRATION TESTS (vectra_m2_tests.exe)]
+[RUN]  test_mmap_loader ... PASSED
+[RUN]  test_q4_k_correctness ... PASSED
+[RUN]  test_q6_k_correctness ... PASSED
+[RUN]  test_sampling ... PASSED
+Summary: 4 / 4 passed.
+
+--------------------------------------------------------------------------------
+
+[SUITE 6: M3 INTEGRATION TESTS (vectra_m3_tests.exe)]
+[RUN]  test_kv_cache_scaling_and_bounds ... PASSED
+[RUN]  test_thread_pool_determinism ... PASSED
+[RUN]  test_q4_k_kernel_parity ... PASSED
+[RUN]  test_full_model_reference_parity ... PASSED
+Summary: 4 / 4 passed.
+
+--------------------------------------------------------------------------------
+
+[SUITE 7: M4 INTEGRATION TESTS (vectra_m4_tests.exe)]
+[RUN]  test_activation_quantization_bounds ... PASSED
+[RUN]  test_q4_k_int8_kernel_parity ... PASSED
+[RUN]  test_q6_k_int8_kernel_parity ... PASSED
+[RUN]  test_q6_k_fused_f32_parity ... PASSED
+[RUN]  test_multi_layer_numerical_bounds ... PASSED
+Summary: 5 / 5 passed.
+
+================================================================================
+OVERALL VERDICT: ALL 40 / 40 REGRESSION TESTS PASSED (100% SUCCESS RATE)
+NO FAILS. NO SKIPS. ZERO COMPILATION WARNINGS IN KERNELS.
+================================================================================

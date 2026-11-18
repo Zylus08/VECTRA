@@ -1,0 +1,17 @@
+Kernel_Name,Quant_Type,Dimension,Arithmetic,Unroll_Factor,Threads,Latency_us,Throughput_GB_s,Speedup_vs_Scalar,Status
+vec_dot_q4_k_scalar,Q4_K,1536,FP32_Scalar,1x,1,1.82,4.8,1.00x,Baseline
+vec_dot_q4_k_f32_avx2,Q4_K,1536,FP32_FMA_AVX2,1x,1,0.33,22.0,5.51x,Production_FP32
+vec_dot_q4_k_f32_2x,Q4_K,1536x1536,FP32_FMA_AVX2,2x_Row,1,52310.0,0.5,0.92x_vs_1x,Ablated_Reg_Spill
+vec_dot_q4_k_q8_avx2,Q4_K,1536,INT8_DP4A_AVX2,1x,1,0.18,36.8,10.11x,Production_INT8
+vec_dot_q6_k_scalar,Q6_K,1536,FP32_Scalar,1x,1,2.45,4.2,1.00x,Baseline
+vec_dot_q6_k_f32_avx2,Q6_K,1536,FP32_Deq_FMA,1x,1,0.72,16.5,3.40x,Production_FP32
+vec_dot_q6_k_f32_fused_avx2,Q6_K,1536,FP32_Fused_AVX2,1x,1,0.98,12.1,2.50x,Ablated_Slow_Unpack
+vec_dot_q6_k_q8_avx2,Q6_K,1536,INT8_DP4A_AVX2,1x,1,0.21,41.2,11.66x,Production_INT8
+matvec_q4_k_f32_attn,Q4_K,1536x1536,FP32_FMA_AVX2,1x,10,2088.0,0.6,3.80x,Production_FP32
+matvec_q4_k_q8_attn,Q4_K,1536x1536,INT8_DP4A_AVX2,1x,10,1149.7,1.1,6.76x,Production_INT8
+matvec_q4_k_f32_gate,Q4_K,8960x1536,FP32_FMA_AVX2,1x,10,13099.1,0.6,3.80x,Production_FP32
+matvec_q4_k_q8_gate,Q4_K,8960x1536,INT8_DP4A_AVX2,1x,10,7210.5,1.1,6.83x,Production_INT8
+matvec_q6_k_f32_down,Q6_K,1536x8960,FP32_Deq_FMA,1x,10,22820.1,0.5,3.20x,Production_FP32
+matvec_q6_k_q8_down,Q6_K,1536x8960,INT8_DP4A_AVX2,1x,10,4320.5,2.6,15.00x,Production_INT8
+matvec_q6_k_f32_head,Q6_K,151936x1536,FP32_Deq_FMA,1x,10,594719.6,0.3,4.50x,Production_FP32
+matvec_q6_k_q8_head,Q6_K,151936x1536,INT8_DP4A_AVX2,1x,10,42108.0,4.4,91.80x,Production_INT8

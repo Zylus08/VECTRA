@@ -48,7 +48,8 @@ public:
         int64_t pos,
         int64_t layer_idx,
         KVCache& kv_cache,
-        const ModelConfig& config
+        const ModelConfig& config,
+        bool use_int8 = true
     );
 
     GGUFTensorView attn_norm_w;
@@ -101,12 +102,16 @@ public:
     const format::GGUFParser& parser() const { return parser_; }
     size_t mapped_bytes() const { return mmap_.size(); }
 
+    void set_use_int8_kernels(bool enable) { use_int8_kernels_ = enable; }
+    bool use_int8_kernels() const { return use_int8_kernels_; }
+
 private:
     GGUFTensorView resolve_tensor(const std::string& name);
 
     format::MemoryMappedFile mmap_;
     format::GGUFParser parser_;
     ModelConfig config_;
+    bool use_int8_kernels_ = true;
 
     GGUFTensorView token_embd_w_;
     std::vector<GGUFTransformerLayer> layers_;

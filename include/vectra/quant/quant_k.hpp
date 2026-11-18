@@ -37,19 +37,42 @@ void dequantize_row_q4_k(const BlockQ4_K* x, float* y, size_t k);
 // Dequantize row of Q6_K
 void dequantize_row_q6_k(const BlockQ6_K* x, float* y, size_t k);
 
+// Block-quantized activation for 256-element super-blocks (Q8_K format)
+struct BlockQ8_K_256 {
+    int8_t qs[256];       // Quantized activation values in [-127, 127]
+    float scales[16];     // FP32 scale per 16-element sub-block (for Q6_K)
+    int32_t sums[16];     // Precomputed sum of qs in each 16-element sub-block
+    float scales32[8];    // FP32 scale per 32-element sub-block (for Q4_K)
+    int32_t sums32[8];    // Precomputed sum of qs in each 32-element sub-block
+};
+
+// Quantize an FP32 activation array of length k into BlockQ8_K_256
+void quantize_activation_q8_k_256(const float* src, BlockQ8_K_256* dst, size_t k);
+
 // Direct dot product: Q4_K with FP32 vector
 float vec_dot_q4_k_f32_scalar(const BlockQ4_K* a, const float* b, size_t k);
 float vec_dot_q4_k_f32_avx2(const BlockQ4_K* a, const float* b, size_t k);
 float vec_dot_q4_k_f32(const BlockQ4_K* a, const float* b, size_t k);
 
+// Direct dot product: Q4_K with Q8_K quantized activation
+float vec_dot_q4_k_q8_avx2(const BlockQ4_K* a, const BlockQ8_K_256* b, size_t k);
+
 // Direct dot product: Q6_K with FP32 vector
 float vec_dot_q6_k_f32_scalar(const BlockQ6_K* a, const float* b, size_t k);
 float vec_dot_q6_k_f32_avx2(const BlockQ6_K* a, const float* b, size_t k);
+float vec_dot_q6_k_f32_fused_avx2(const BlockQ6_K* a, const float* b, size_t k);
 float vec_dot_q6_k_f32(const BlockQ6_K* a, const float* b, size_t k);
 
-// Quantized matvec
+// Direct dot product: Q6_K with Q8_K quantized activation
+float vec_dot_q6_k_q8_avx2(const BlockQ6_K* a, const BlockQ8_K_256* b, size_t k);
+
+// Quantized matvec (FP32 activations)
 void matvec_q4_k_f32(const BlockQ4_K* A, const float* x, const float* bias, float* y, size_t rows, size_t cols);
 void matvec_q6_k_f32(const BlockQ6_K* A, const float* x, const float* bias, float* y, size_t rows, size_t cols);
+
+// Quantized matvec (INT8 / Q8_K activations)
+void matvec_q4_k_q8(const BlockQ4_K* A, const BlockQ8_K_256* x, const float* bias, float* y, size_t rows, size_t cols);
+void matvec_q6_k_q8(const BlockQ6_K* A, const BlockQ8_K_256* x, const float* bias, float* y, size_t rows, size_t cols);
 
 // Batched Quantized matvec: evaluates N independent vectors against same weights
 void matvec_q4_k_f32_batch(
