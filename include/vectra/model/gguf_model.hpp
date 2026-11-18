@@ -5,6 +5,7 @@
 #include "vectra/format/gguf_parser.hpp"
 #include "vectra/model/transformer.hpp"
 #include "vectra/model/kv_cache.hpp"
+#include "vectra/quant/quant_k.hpp"
 #include "vectra/runtime/sampler.hpp"
 #include <string>
 #include <vector>
@@ -35,8 +36,56 @@ void matvec_batch_dispatch(
     size_t batch_size
 );
 
+void matvec_batch_dispatch_q8(
+    const GGUFTensorView& W,
+    const quant::BlockQ8_K_256* const* X_q8,
+    const float* bias,
+    float* const* Y,
+    size_t batch_size
+);
+
 // Dequantize a single row from a 2D tensor
 void dequantize_row_dispatch(const GGUFTensorView& W, int64_t row_idx, float* out);
+
+struct LayerScratch {
+    std::vector<float> normed1;
+    std::vector<float> q;
+    std::vector<float> k;
+    std::vector<float> v;
+    std::vector<float> attn_heads;
+    std::vector<float> attn_out;
+    std::vector<float> res1;
+    std::vector<float> normed2;
+    std::vector<float> gate;
+    std::vector<float> up;
+    std::vector<float> act;
+    std::vector<float> ffn_out;
+    std::vector<quant::BlockQ8_K_256> q8_normed1;
+    std::vector<quant::BlockQ8_K_256> q8_attn;
+    std::vector<quant::BlockQ8_K_256> q8_normed2;
+    std::vector<quant::BlockQ8_K_256> q8_act;
+
+    void init(int64_t h_dim, int64_t q_dim, int64_t kv_dim, int64_t inter_dim) {
+        if (normed1.size() != static_cast<size_t>(h_dim)) {
+            normed1.resize(h_dim);
+            q.resize(q_dim);
+            k.resize(kv_dim);
+            v.resize(kv_dim);
+            attn_heads.resize(q_dim);
+            attn_out.resize(h_dim);
+            res1.resize(h_dim);
+            normed2.resize(h_dim);
+            gate.resize(inter_dim);
+            up.resize(inter_dim);
+            act.resize(inter_dim);
+            ffn_out.resize(h_dim);
+            q8_normed1.resize((h_dim + 255) / 256);
+            q8_attn.resize((q_dim + 255) / 256);
+            q8_normed2.resize((h_dim + 255) / 256);
+            q8_act.resize((inter_dim + 255) / 256);
+        }
+    }
+};
 
 class GGUFTransformerLayer {
 public:
@@ -49,6 +98,7 @@ public:
         int64_t layer_idx,
         KVCache& kv_cache,
         const ModelConfig& config,
+        LayerScratch& scratch,
         bool use_int8 = true
     );
 
@@ -117,6 +167,10 @@ private:
     std::vector<GGUFTransformerLayer> layers_;
     GGUFTensorView output_norm_w_;
     GGUFTensorView output_w_;
+
+    mutable LayerScratch scratch_;
+    mutable std::vector<float> x_buf1_;
+    mutable std::vector<float> x_buf2_;
 };
 
 } // namespace vectra::model

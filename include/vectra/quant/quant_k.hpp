@@ -44,6 +44,7 @@ struct BlockQ8_K_256 {
     int32_t sums[16];     // Precomputed sum of qs in each 16-element sub-block
     float scales32[8];    // FP32 scale per 32-element sub-block (for Q4_K)
     int32_t sums32[8];    // Precomputed sum of qs in each 32-element sub-block
+    int32_t sums_interleaved[16]; // Interleaved sums for vectorized AVX2 dot product
 };
 
 // Quantize an FP32 activation array of length k into BlockQ8_K_256
@@ -74,6 +75,24 @@ void matvec_q6_k_f32(const BlockQ6_K* A, const float* x, const float* bias, floa
 void matvec_q4_k_q8(const BlockQ4_K* A, const BlockQ8_K_256* x, const float* bias, float* y, size_t rows, size_t cols);
 void matvec_q6_k_q8(const BlockQ6_K* A, const BlockQ8_K_256* x, const float* bias, float* y, size_t rows, size_t cols);
 
+// Fused 2x projection (e.g., Gate and Up projections sharing activation)
+void matvec_q4_k_q8_2x(
+    const BlockQ4_K* A1, float* y1,
+    const BlockQ4_K* A2, float* y2,
+    const BlockQ8_K_256* x,
+    size_t rows,
+    size_t cols
+);
+
+// Fused QKV projection sharing activation across all 3 heads
+void matvec_q4_k_q8_qkv(
+    const BlockQ4_K* Q_W, const float* q_bias, float* q_out, size_t q_rows,
+    const BlockQ4_K* K_W, const float* k_bias, float* k_out, size_t k_rows,
+    const BlockQ4_K* V_W, const float* v_bias, float* v_out, size_t v_rows,
+    const BlockQ8_K_256* x,
+    size_t cols
+);
+
 // Batched Quantized matvec: evaluates N independent vectors against same weights
 void matvec_q4_k_f32_batch(
     const BlockQ4_K* A,
@@ -88,6 +107,26 @@ void matvec_q4_k_f32_batch(
 void matvec_q6_k_f32_batch(
     const BlockQ6_K* A,
     const float* const* X,
+    const float* bias,
+    float* const* Y,
+    size_t batch_size,
+    size_t rows,
+    size_t cols
+);
+
+void matvec_q4_k_q8_batch(
+    const BlockQ4_K* A,
+    const BlockQ8_K_256* const* X,
+    const float* bias,
+    float* const* Y,
+    size_t batch_size,
+    size_t rows,
+    size_t cols
+);
+
+void matvec_q6_k_q8_batch(
+    const BlockQ6_K* A,
+    const BlockQ8_K_256* const* X,
     const float* bias,
     float* const* Y,
     size_t batch_size,

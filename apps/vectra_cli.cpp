@@ -32,13 +32,13 @@ CliArgs parse_args(int argc, char* argv[]) {
     CliArgs args;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--model" && i + 1 < argc) {
+        if ((arg == "--model" || arg == "-m") && i + 1 < argc) {
             args.model_path = argv[++i];
-        } else if (arg == "--tokenizer" && i + 1 < argc) {
+        } else if ((arg == "--tokenizer" || arg == "-tk") && i + 1 < argc) {
             args.tokenizer_path = argv[++i];
-        } else if (arg == "--prompt" && i + 1 < argc) {
+        } else if ((arg == "--prompt" || arg == "-p") && i + 1 < argc) {
             args.prompt = argv[++i];
-        } else if (arg == "--max-tokens" && i + 1 < argc) {
+        } else if ((arg == "--max-tokens" || arg == "-n") && i + 1 < argc) {
             args.max_tokens = std::stoul(argv[++i]);
         } else if (arg == "--temp" && i + 1 < argc) {
             args.temp = std::stof(argv[++i]);
@@ -48,7 +48,7 @@ CliArgs parse_args(int argc, char* argv[]) {
             args.top_k = std::stoi(argv[++i]);
         } else if (arg == "--seed" && i + 1 < argc) {
             args.seed = std::stoull(argv[++i]);
-        } else if (arg == "--threads" && i + 1 < argc) {
+        } else if ((arg == "--threads" || arg == "-t") && i + 1 < argc) {
             args.threads = std::stoul(argv[++i]);
         } else if (arg == "--chat") {
             args.chat_format = true;

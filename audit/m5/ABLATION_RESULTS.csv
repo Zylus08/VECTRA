@@ -1,0 +1,8 @@
+Stage_ID,Optimization_Description,Prefill_P1_tok_s,Prefill_P3_tok_s,Decode_P1_tok_s,Decode_ms_per_tok,Heap_Allocs_per_tok,Speedup_Factor
+0,M4 Baseline (Un-fused INT8, degraded prefill),3.62,4.16,12.70,78.74,336,1.00x
+1,+ Batched INT8 GEMV-N (Prefill Recovery),22.22,25.00,12.70,78.74,336,1.75x (Prefill 6.1x)
+2,+ Vectorized LM-Head Projection (AVX2 hadd),22.22,25.00,15.10,66.22,336,1.19x
+3,+ Inlined Q4_K Scales & Mins Bitfield Unpack,22.35,25.10,16.40,60.97,336,1.29x
+4,+ Fused QKV & Gate+Up Dispatches (-84 barriers),22.50,25.20,18.15,55.10,336,1.43x
+5,+ Persistent LayerScratch Workspace (0 allocs),22.56,25.30,19.35,51.68,0,1.52x
+6,+ Active Caller-Thread Slicing (ThreadPool),22.56,25.55,20.46,48.87,0,1.61x

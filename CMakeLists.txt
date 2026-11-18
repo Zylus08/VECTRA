@@ -101,6 +101,23 @@ if (VECTRA_BUILD_TESTS)
     add_executable(vectra_m4_tests tests/integration/m4_tests.cpp)
     target_link_libraries(vectra_m4_tests PRIVATE vectra_static)
     add_test(NAME m4_tests COMMAND vectra_m4_tests)
+
+    # M5 Arithmetic Safety tests
+    add_executable(vectra_arithmetic_safety_tests tests/unit/arithmetic_safety_tests.cpp)
+    target_link_libraries(vectra_arithmetic_safety_tests PRIVATE vectra_static)
+    add_test(NAME arithmetic_safety_tests COMMAND vectra_arithmetic_safety_tests)
+
+    # M5 Integration tests
+    add_executable(vectra_m5_tests tests/integration/m5_tests.cpp)
+    target_link_libraries(vectra_m5_tests PRIVATE vectra_static)
+    add_test(NAME m5_tests COMMAND vectra_m5_tests)
+
+    # Set working directory for all tests to project root
+    set_tests_properties(
+        unit_tests numerical_tests integration_tests tokenizer_tests
+        m2_tests m3_tests m4_tests arithmetic_safety_tests m5_tests
+        PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
 endif()
 
 # Microbenchmarks

@@ -69,6 +69,38 @@ void matvec_batch_dispatch(
     }
 }
 
+void matvec_batch_dispatch_q8(
+    const GGUFTensorView& W,
+    const quant::BlockQ8_K_256* const* X_q8,
+    const float* bias,
+    float* const* Y,
+    size_t batch_size
+) {
+    if (!W.is_valid()) {
+        throw VectraException("matvec_batch_dispatch_q8 called on invalid tensor: " + W.name);
+    }
+    if (batch_size == 0) return;
+    if (batch_size == 1) {
+        if (W.type == format::GGMLType::Q4_K) {
+            quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(W.data), X_q8[0], bias, Y[0], W.rows, W.cols);
+        } else if (W.type == format::GGMLType::Q6_K) {
+            quant::matvec_q6_k_q8(reinterpret_cast<const quant::BlockQ6_K*>(W.data), X_q8[0], bias, Y[0], W.rows, W.cols);
+        }
+        return;
+    }
+
+    switch (W.type) {
+        case format::GGMLType::Q4_K:
+            quant::matvec_q4_k_q8_batch(reinterpret_cast<const quant::BlockQ4_K*>(W.data), X_q8, bias, Y, batch_size, W.rows, W.cols);
+            break;
+        case format::GGMLType::Q6_K:
+            quant::matvec_q6_k_q8_batch(reinterpret_cast<const quant::BlockQ6_K*>(W.data), X_q8, bias, Y, batch_size, W.rows, W.cols);
+            break;
+        default:
+            throw VectraException("Unsupported tensor type for matvec_batch_dispatch_q8: " + std::to_string(static_cast<int>(W.type)));
+    }
+}
+
 void dequantize_row_dispatch(const GGUFTensorView& W, int64_t row_idx, float* out) {
     if (!W.is_valid()) {
         throw VectraException("dequantize_row_dispatch called on invalid tensor: " + W.name);
@@ -115,31 +147,32 @@ void GGUFTransformerLayer::forward(
     int64_t layer_idx,
     KVCache& kv_cache,
     const ModelConfig& config,
+    LayerScratch& scratch,
     bool use_int8
 ) {
     int64_t h_dim = config.hidden_dim;
     int64_t q_dim = config.num_heads * config.head_dim;
-    int64_t kv_dim = config.num_kv_heads * config.head_dim;
+    int64_t inter_dim = config.intermediate_dim;
 
-    std::vector<float> normed1(h_dim);
-    std::vector<float> q(q_dim);
-    std::vector<float> k(kv_dim);
-    std::vector<float> v(kv_dim);
-    std::vector<float> attn_heads(q_dim);
-    std::vector<float> attn_out(h_dim);
-    std::vector<float> res1(h_dim);
-    std::vector<float> normed2(h_dim);
-    std::vector<float> gate(config.intermediate_dim);
-    std::vector<float> up(config.intermediate_dim);
-    std::vector<float> act(config.intermediate_dim);
-    std::vector<float> ffn_out(h_dim);
+    float* normed1 = scratch.normed1.data();
+    float* q = scratch.q.data();
+    float* k = scratch.k.data();
+    float* v = scratch.v.data();
+    float* attn_heads = scratch.attn_heads.data();
+    float* attn_out = scratch.attn_out.data();
+    float* res1 = scratch.res1.data();
+    float* normed2 = scratch.normed2.data();
+    float* gate = scratch.gate.data();
+    float* up = scratch.up.data();
+    float* act = scratch.act.data();
+    float* ffn_out = scratch.ffn_out.data();
 
     // 1. Pre-Attention RMSNorm
     const float* attn_norm_ptr = reinterpret_cast<const float*>(attn_norm_w.data);
     if (math::avx2::is_supported()) {
-        math::avx2::rms_norm(x_in, attn_norm_ptr, normed1.data(), h_dim, config.rms_norm_eps);
+        math::avx2::rms_norm(x_in, attn_norm_ptr, normed1, h_dim, config.rms_norm_eps);
     } else {
-        math::scalar::rms_norm(x_in, attn_norm_ptr, normed1.data(), h_dim, config.rms_norm_eps);
+        math::scalar::rms_norm(x_in, attn_norm_ptr, normed1, h_dim, config.rms_norm_eps);
     }
 
     // 2. Q, K, V Projections
@@ -148,30 +181,33 @@ void GGUFTransformerLayer::forward(
     const float* v_bias = v_proj_b.is_valid() ? reinterpret_cast<const float*>(v_proj_b.data) : nullptr;
 
     if (use_int8 && math::avx2::is_supported() && q_proj_w.type == format::GGMLType::Q4_K) {
-        alignas(32) quant::BlockQ8_K_256 q8_normed1[6];
-        quant::quantize_activation_q8_k_256(normed1.data(), q8_normed1, h_dim);
-        quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(q_proj_w.data), q8_normed1, q_bias, q.data(), q_proj_w.rows, q_proj_w.cols);
-        quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(k_proj_w.data), q8_normed1, k_bias, k.data(), k_proj_w.rows, k_proj_w.cols);
-        quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(v_proj_w.data), q8_normed1, v_bias, v.data(), v_proj_w.rows, v_proj_w.cols);
+        quant::quantize_activation_q8_k_256(normed1, scratch.q8_normed1.data(), h_dim);
+        quant::matvec_q4_k_q8_qkv(
+            reinterpret_cast<const quant::BlockQ4_K*>(q_proj_w.data), q_bias, q, q_proj_w.rows,
+            reinterpret_cast<const quant::BlockQ4_K*>(k_proj_w.data), k_bias, k, k_proj_w.rows,
+            reinterpret_cast<const quant::BlockQ4_K*>(v_proj_w.data), v_bias, v, v_proj_w.rows,
+            scratch.q8_normed1.data(),
+            q_proj_w.cols
+        );
     } else {
-        matvec_dispatch(q_proj_w, normed1.data(), q_bias, q.data());
-        matvec_dispatch(k_proj_w, normed1.data(), k_bias, k.data());
-        matvec_dispatch(v_proj_w, normed1.data(), v_bias, v.data());
+        matvec_dispatch(q_proj_w, normed1, q_bias, q);
+        matvec_dispatch(k_proj_w, normed1, k_bias, k);
+        matvec_dispatch(v_proj_w, normed1, v_bias, v);
     }
 
     // 3. RoPE
-    math::apply_rope_to_heads(q.data(), config.num_heads, k.data(), config.num_kv_heads, config.head_dim, pos, config.rope_theta);
+    math::apply_rope_to_heads(q, config.num_heads, k, config.num_kv_heads, config.head_dim, pos, config.rope_theta);
 
     // 4. Append to KV Cache
-    kv_cache.append(layer_idx, pos, k.data(), v.data());
+    kv_cache.append(layer_idx, pos, k, v);
 
     // 5. GQA Attention
     int64_t current_seq = pos + 1;
     math::compute_gqa_attention(
-        q.data(),
+        q,
         kv_cache.key_cache(layer_idx),
         kv_cache.val_cache(layer_idx),
-        attn_heads.data(),
+        attn_heads,
         config.num_heads,
         config.num_kv_heads,
         config.head_dim,
@@ -181,53 +217,55 @@ void GGUFTransformerLayer::forward(
 
     // 6. Attention Output Projection + Residual
     if (use_int8 && math::avx2::is_supported() && o_proj_w.type == format::GGMLType::Q4_K) {
-        alignas(32) quant::BlockQ8_K_256 q8_attn[6];
-        quant::quantize_activation_q8_k_256(attn_heads.data(), q8_attn, h_dim);
-        quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(o_proj_w.data), q8_attn, nullptr, attn_out.data(), o_proj_w.rows, o_proj_w.cols);
+        quant::quantize_activation_q8_k_256(attn_heads, scratch.q8_attn.data(), q_dim);
+        quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(o_proj_w.data), scratch.q8_attn.data(), nullptr, attn_out, o_proj_w.rows, o_proj_w.cols);
     } else {
-        matvec_dispatch(o_proj_w, attn_heads.data(), nullptr, attn_out.data());
+        matvec_dispatch(o_proj_w, attn_heads, nullptr, attn_out);
     }
 
     if (math::avx2::is_supported()) {
-        math::avx2::add(x_in, attn_out.data(), res1.data(), h_dim);
+        math::avx2::add(x_in, attn_out, res1, h_dim);
     } else {
-        math::scalar::add(x_in, attn_out.data(), res1.data(), h_dim);
+        math::scalar::add(x_in, attn_out, res1, h_dim);
     }
 
     // 7. Post-Attention RMSNorm
     const float* ffn_norm_ptr = reinterpret_cast<const float*>(ffn_norm_w.data);
     if (math::avx2::is_supported()) {
-        math::avx2::rms_norm(res1.data(), ffn_norm_ptr, normed2.data(), h_dim, config.rms_norm_eps);
+        math::avx2::rms_norm(res1, ffn_norm_ptr, normed2, h_dim, config.rms_norm_eps);
     } else {
-        math::scalar::rms_norm(res1.data(), ffn_norm_ptr, normed2.data(), h_dim, config.rms_norm_eps);
+        math::scalar::rms_norm(res1, ffn_norm_ptr, normed2, h_dim, config.rms_norm_eps);
     }
 
     // 8. SwiGLU FFN
     if (use_int8 && math::avx2::is_supported() && gate_proj_w.type == format::GGMLType::Q4_K) {
-        alignas(32) quant::BlockQ8_K_256 q8_normed2[6];
-        quant::quantize_activation_q8_k_256(normed2.data(), q8_normed2, h_dim);
-        quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(gate_proj_w.data), q8_normed2, nullptr, gate.data(), gate_proj_w.rows, gate_proj_w.cols);
-        quant::matvec_q4_k_q8(reinterpret_cast<const quant::BlockQ4_K*>(up_proj_w.data), q8_normed2, nullptr, up.data(), up_proj_w.rows, up_proj_w.cols);
+        quant::quantize_activation_q8_k_256(normed2, scratch.q8_normed2.data(), h_dim);
+        quant::matvec_q4_k_q8_2x(
+            reinterpret_cast<const quant::BlockQ4_K*>(gate_proj_w.data), gate,
+            reinterpret_cast<const quant::BlockQ4_K*>(up_proj_w.data), up,
+            scratch.q8_normed2.data(),
+            gate_proj_w.rows,
+            gate_proj_w.cols
+        );
     } else {
-        matvec_dispatch(gate_proj_w, normed2.data(), nullptr, gate.data());
-        matvec_dispatch(up_proj_w, normed2.data(), nullptr, up.data());
+        matvec_dispatch(gate_proj_w, normed2, nullptr, gate);
+        matvec_dispatch(up_proj_w, normed2, nullptr, up);
     }
 
-    math::scalar::swiglu(gate.data(), up.data(), act.data(), config.intermediate_dim);
+    math::scalar::swiglu(gate, up, act, inter_dim);
 
     if (use_int8 && math::avx2::is_supported() && down_proj_w.type == format::GGMLType::Q6_K) {
-        alignas(32) quant::BlockQ8_K_256 q8_act[35]; // 8960 / 256 = 35 blocks
-        quant::quantize_activation_q8_k_256(act.data(), q8_act, config.intermediate_dim);
-        quant::matvec_q6_k_q8(reinterpret_cast<const quant::BlockQ6_K*>(down_proj_w.data), q8_act, nullptr, ffn_out.data(), down_proj_w.rows, down_proj_w.cols);
+        quant::quantize_activation_q8_k_256(act, scratch.q8_act.data(), inter_dim);
+        quant::matvec_q6_k_q8(reinterpret_cast<const quant::BlockQ6_K*>(down_proj_w.data), scratch.q8_act.data(), nullptr, ffn_out, down_proj_w.rows, down_proj_w.cols);
     } else {
-        matvec_dispatch(down_proj_w, act.data(), nullptr, ffn_out.data());
+        matvec_dispatch(down_proj_w, act, nullptr, ffn_out);
     }
 
     // 9. Second Residual
     if (math::avx2::is_supported()) {
-        math::avx2::add(res1.data(), ffn_out.data(), x_out, h_dim);
+        math::avx2::add(res1, ffn_out, x_out, h_dim);
     } else {
-        math::scalar::add(res1.data(), ffn_out.data(), x_out, h_dim);
+        math::scalar::add(res1, ffn_out, x_out, h_dim);
     }
 }
 
@@ -323,41 +361,49 @@ void GGUFTransformerModel::forward_token(
     }
 
     int64_t h_dim = config_.hidden_dim;
-    std::vector<float> x_cur(h_dim);
-    std::vector<float> x_next(h_dim);
+    scratch_.init(h_dim, config_.num_heads * config_.head_dim, config_.num_kv_heads * config_.head_dim, config_.intermediate_dim);
 
-    // 1. Dequantize token embedding row
-    dequantize_row_dispatch(token_embd_w_, token_id, x_cur.data());
-
-    // 2. Forward through all layers
-    for (int64_t l = 0; l < config_.num_layers; ++l) {
-        layers_[l].forward(x_cur.data(), x_next.data(), pos, l, kv_cache, config_, use_int8_kernels_);
-        x_cur = x_next;
+    if (x_buf1_.size() != static_cast<size_t>(h_dim)) {
+        x_buf1_.resize(h_dim);
+        x_buf2_.resize(h_dim);
     }
 
+    float* cur = x_buf1_.data();
+    float* next = x_buf2_.data();
+
+    // 1. Dequantize token embedding row
+    dequantize_row_dispatch(token_embd_w_, token_id, cur);
+
+    // 2. Forward through all layers
+    auto t_layers_start = std::chrono::high_resolution_clock::now();
+    for (int64_t l = 0; l < config_.num_layers; ++l) {
+        layers_[l].forward(cur, next, pos, l, kv_cache, config_, scratch_, use_int8_kernels_);
+        std::swap(cur, next);
+    }
+    auto t_layers_end = std::chrono::high_resolution_clock::now();
+
     // 3. Final RMSNorm
-    std::vector<float> final_normed(h_dim);
+    float* final_normed = scratch_.normed1.data();
     const float* norm_ptr = reinterpret_cast<const float*>(output_norm_w_.data);
     if (math::avx2::is_supported()) {
-        math::avx2::rms_norm(x_cur.data(), norm_ptr, final_normed.data(), h_dim, config_.rms_norm_eps);
+        math::avx2::rms_norm(cur, norm_ptr, final_normed, h_dim, config_.rms_norm_eps);
     } else {
-        math::scalar::rms_norm(x_cur.data(), norm_ptr, final_normed.data(), h_dim, config_.rms_norm_eps);
+        math::scalar::rms_norm(cur, norm_ptr, final_normed, h_dim, config_.rms_norm_eps);
     }
 
     // 4. Output projection to logits
     if (use_int8_kernels_ && math::avx2::is_supported() && output_w_.type == format::GGMLType::Q6_K) {
-        alignas(32) quant::BlockQ8_K_256 q8_final[6];
-        quant::quantize_activation_q8_k_256(final_normed.data(), q8_final, h_dim);
+        quant::quantize_activation_q8_k_256(final_normed, scratch_.q8_normed1.data(), h_dim);
         quant::matvec_q6_k_q8(
             reinterpret_cast<const quant::BlockQ6_K*>(output_w_.data),
-            q8_final,
+            scratch_.q8_normed1.data(),
             nullptr,
             logits_out,
             output_w_.rows,
             output_w_.cols
         );
     } else {
-        matvec_dispatch(output_w_, final_normed.data(), nullptr, logits_out);
+        matvec_dispatch(output_w_, final_normed, nullptr, logits_out);
     }
 }
 
@@ -372,6 +418,10 @@ void GGUFTransformerModel::forward_prompt_batch(
     int64_t q_dim = config_.num_heads * config_.head_dim;
     int64_t kv_dim = config_.num_kv_heads * config_.head_dim;
     int64_t inter_dim = config_.intermediate_dim;
+
+    size_t nb_h = (h_dim + 255) / 256;
+    size_t nb_q = (q_dim + 255) / 256;
+    size_t nb_inter = (inter_dim + 255) / 256;
 
     std::vector<std::vector<float>> X(B, std::vector<float>(h_dim));
     std::vector<std::vector<float>> normed1(B, std::vector<float>(h_dim));
@@ -395,6 +445,29 @@ void GGUFTransformerModel::forward_prompt_batch(
     std::vector<float*> ptr_gate(B), ptr_up(B);
     std::vector<const float*> ptr_act(B);
     std::vector<float*> ptr_ffn_out(B);
+
+    std::vector<std::vector<quant::BlockQ8_K_256>> q8_normed1;
+    std::vector<std::vector<quant::BlockQ8_K_256>> q8_attn;
+    std::vector<std::vector<quant::BlockQ8_K_256>> q8_normed2;
+    std::vector<std::vector<quant::BlockQ8_K_256>> q8_act;
+    std::vector<const quant::BlockQ8_K_256*> ptr_q8_normed1(B);
+    std::vector<const quant::BlockQ8_K_256*> ptr_q8_attn(B);
+    std::vector<const quant::BlockQ8_K_256*> ptr_q8_normed2(B);
+    std::vector<const quant::BlockQ8_K_256*> ptr_q8_act(B);
+
+    bool can_use_int8 = use_int8_kernels_ && math::avx2::is_supported();
+    if (can_use_int8) {
+        q8_normed1.resize(B, std::vector<quant::BlockQ8_K_256>(nb_h));
+        q8_attn.resize(B, std::vector<quant::BlockQ8_K_256>(nb_q));
+        q8_normed2.resize(B, std::vector<quant::BlockQ8_K_256>(nb_h));
+        q8_act.resize(B, std::vector<quant::BlockQ8_K_256>(nb_inter));
+        for (size_t b = 0; b < B; ++b) {
+            ptr_q8_normed1[b] = q8_normed1[b].data();
+            ptr_q8_attn[b] = q8_attn[b].data();
+            ptr_q8_normed2[b] = q8_normed2[b].data();
+            ptr_q8_act[b] = q8_act[b].data();
+        }
+    }
 
     for (size_t b = 0; b < B; ++b) {
         ptr_normed1[b] = normed1[b].data();
@@ -434,9 +507,18 @@ void GGUFTransformerModel::forward_prompt_batch(
         const float* k_bias = layer.k_proj_b.is_valid() ? reinterpret_cast<const float*>(layer.k_proj_b.data) : nullptr;
         const float* v_bias = layer.v_proj_b.is_valid() ? reinterpret_cast<const float*>(layer.v_proj_b.data) : nullptr;
 
-        matvec_batch_dispatch(layer.q_proj_w, ptr_normed1.data(), q_bias, ptr_Q.data(), B);
-        matvec_batch_dispatch(layer.k_proj_w, ptr_normed1.data(), k_bias, ptr_K.data(), B);
-        matvec_batch_dispatch(layer.v_proj_w, ptr_normed1.data(), v_bias, ptr_V.data(), B);
+        if (can_use_int8) {
+            for (size_t b = 0; b < B; ++b) {
+                quant::quantize_activation_q8_k_256(normed1[b].data(), q8_normed1[b].data(), h_dim);
+            }
+            matvec_batch_dispatch_q8(layer.q_proj_w, ptr_q8_normed1.data(), q_bias, ptr_Q.data(), B);
+            matvec_batch_dispatch_q8(layer.k_proj_w, ptr_q8_normed1.data(), k_bias, ptr_K.data(), B);
+            matvec_batch_dispatch_q8(layer.v_proj_w, ptr_q8_normed1.data(), v_bias, ptr_V.data(), B);
+        } else {
+            matvec_batch_dispatch(layer.q_proj_w, ptr_normed1.data(), q_bias, ptr_Q.data(), B);
+            matvec_batch_dispatch(layer.k_proj_w, ptr_normed1.data(), k_bias, ptr_K.data(), B);
+            matvec_batch_dispatch(layer.v_proj_w, ptr_normed1.data(), v_bias, ptr_V.data(), B);
+        }
 
         // RoPE and KV Cache Append for all tokens in prompt
         for (size_t b = 0; b < B; ++b) {
@@ -463,7 +545,15 @@ void GGUFTransformerModel::forward_prompt_batch(
         }
 
         // Attention output projection + residual
-        matvec_batch_dispatch(layer.o_proj_w, ptr_attn_heads.data(), nullptr, ptr_attn_out.data(), B);
+        if (can_use_int8) {
+            for (size_t b = 0; b < B; ++b) {
+                quant::quantize_activation_q8_k_256(attn_heads[b].data(), q8_attn[b].data(), q_dim);
+            }
+            matvec_batch_dispatch_q8(layer.o_proj_w, ptr_q8_attn.data(), nullptr, ptr_attn_out.data(), B);
+        } else {
+            matvec_batch_dispatch(layer.o_proj_w, ptr_attn_heads.data(), nullptr, ptr_attn_out.data(), B);
+        }
+
         for (size_t b = 0; b < B; ++b) {
             if (math::avx2::is_supported()) {
                 math::avx2::add(X[b].data(), attn_out[b].data(), res1[b].data(), h_dim);
@@ -483,14 +573,29 @@ void GGUFTransformerModel::forward_prompt_batch(
         }
 
         // SwiGLU FFN Projections
-        matvec_batch_dispatch(layer.gate_proj_w, ptr_normed2.data(), nullptr, ptr_gate.data(), B);
-        matvec_batch_dispatch(layer.up_proj_w, ptr_normed2.data(), nullptr, ptr_up.data(), B);
+        if (can_use_int8) {
+            for (size_t b = 0; b < B; ++b) {
+                quant::quantize_activation_q8_k_256(normed2[b].data(), q8_normed2[b].data(), h_dim);
+            }
+            matvec_batch_dispatch_q8(layer.gate_proj_w, ptr_q8_normed2.data(), nullptr, ptr_gate.data(), B);
+            matvec_batch_dispatch_q8(layer.up_proj_w, ptr_q8_normed2.data(), nullptr, ptr_up.data(), B);
+        } else {
+            matvec_batch_dispatch(layer.gate_proj_w, ptr_normed2.data(), nullptr, ptr_gate.data(), B);
+            matvec_batch_dispatch(layer.up_proj_w, ptr_normed2.data(), nullptr, ptr_up.data(), B);
+        }
 
         for (size_t b = 0; b < B; ++b) {
             math::scalar::swiglu(gate[b].data(), up[b].data(), act[b].data(), inter_dim);
         }
 
-        matvec_batch_dispatch(layer.down_proj_w, ptr_act.data(), nullptr, ptr_ffn_out.data(), B);
+        if (can_use_int8) {
+            for (size_t b = 0; b < B; ++b) {
+                quant::quantize_activation_q8_k_256(act[b].data(), q8_act[b].data(), inter_dim);
+            }
+            matvec_batch_dispatch_q8(layer.down_proj_w, ptr_q8_act.data(), nullptr, ptr_ffn_out.data(), B);
+        } else {
+            matvec_batch_dispatch(layer.down_proj_w, ptr_act.data(), nullptr, ptr_ffn_out.data(), B);
+        }
 
         // Residual connection
         for (size_t b = 0; b < B; ++b) {
